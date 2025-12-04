@@ -1,0 +1,73 @@
+# Flutter/Dart
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.iml
+.metadata
+*.log
+*.lock
+
+# Android
+android/.gradle/
+android/app/debug/
+android/app/profile/
+android/app/release/
+**/android/key.properties
+**/android/*.keystore
+**/android/*.jks
+local.properties
+
+# iOS
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Runner.xcworkspace/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+
+# Python Backend
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.env
+*.env
+!.env.example
+.eggs/
+*.egg-info/
+dist/
+build/
+
+# Sensitive files - NEVER COMMIT THESE
+*.pem
+*.key
+**/secrets/
+**/*secret*
+**/*credential*
+**/OpenAI API.env.txt
+
+# OS
+.DS_Store
+Thumbs.db
+*.db
+
+# Test/Coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Misc
+*.bak
+*.tmp
+*.temp
