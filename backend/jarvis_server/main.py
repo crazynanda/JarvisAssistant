@@ -36,17 +36,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize OpenAI client
-openai_api_key = os.getenv("OPENAI_API_KEY")
-if not openai_api_key:
-    logger.warning("OPENAI_API_KEY not found in environment variables")
-    client = None
+# Initialize OpenAI client (supports OpenAI, Groq, LM Studio)
+openai_api_key = os.getenv("OPENAI_API_KEY", "")
+base_url = os.getenv("OPENAI_BASE_URL", "")
+use_local = os.getenv("USE_LOCAL_MODEL", "false").lower() == "true"
+
+if use_local:
+    local_url = base_url or "http://localhost:1234/v1"
+    logger.info(f"Using LOCAL model at {local_url}")
+    client = OpenAI(api_key="local", base_url=local_url)
+elif openai_api_key:
+    if base_url:
+        logger.info(f"Using API at {base_url}")
+    else:
+        logger.info("Using OpenAI API")
+    client = OpenAI(api_key=openai_api_key, base_url=base_url if base_url else None)
 else:
-    base_url = os.getenv("OPENAI_BASE_URL")
-    client = OpenAI(
-        api_key=openai_api_key,
-        base_url=base_url if base_url else None
-    )
+    logger.warning("No API configuration found")
+    client = None
 
 # Initialize memory system
 try:
