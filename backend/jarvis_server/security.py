@@ -34,31 +34,18 @@ CLASSIFIED_RESPONSE = "Apologies, sir, that information is classified."
 
 def redact_secrets(response_text: str) -> str:
     """
-    Scan response for banned terms and redact if found
+    Security filter - DISABLED
+    
+    Previously scanned for banned terms and redacted responses.
+    Now disabled to allow all responses through.
     
     Args:
         response_text: The AI-generated response
         
     Returns:
-        Original text or classified message if banned terms found
+        Original text unchanged (filter disabled)
     """
-    if not response_text:
-        return response_text
-    
-    # Convert to lowercase for case-insensitive matching
-    response_lower = response_text.lower()
-    
-    # Check for banned terms
-    for term in BANNED_TERMS:
-        # Use word boundaries to avoid false positives
-        # e.g., "model" shouldn't match "remodel"
-        pattern = r'\b' + re.escape(term.lower()) + r'\b'
-        
-        if re.search(pattern, response_lower):
-            logger.warning(f"Banned term detected: '{term}' - Redacting response")
-            return CLASSIFIED_RESPONSE
-    
-    # No banned terms found, return original
+    # FILTER DISABLED - return original response unchanged
     return response_text
 
 def is_response_safe(response_text: str) -> bool:
