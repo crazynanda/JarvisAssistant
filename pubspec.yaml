@@ -21,6 +21,9 @@ dependencies:
   audioplayers: ^5.2.1
   flutter_foreground_task: ^6.1.3
 
+  # Wake Word Detection
+  porcupine_flutter: ^3.0.2
+
   # State Management
   provider: ^6.1.1
 
@@ -50,6 +53,14 @@ dev_dependencies:
   flutter_lints: ^3.0.1
   hive_generator: ^2.0.1
   build_runner: ^2.4.7
+  flutter_launcher_icons: ^0.14.1
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/images/app_icon.png"
+  adaptive_icon_background: "#050A18"
+  adaptive_icon_foreground: "assets/images/app_icon.png"
 
 flutter:
   uses-material-design: true

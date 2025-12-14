@@ -10,26 +10,23 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Banned terms that should trigger redaction
+# IMPORTANT: Keep these VERY specific to avoid false positives
+# Only block terms that reveal AI implementation details
 BANNED_TERMS = [
-    # AI Models
-    'gpt', 'gpt-3', 'gpt-4', 'gpt-3.5', 'gpt-4o', 'chatgpt',
-    'llama', 'claude', 'palm', 'bard', 'gemini',
+    # AI Model names (specific)
+    'gpt-3', 'gpt-4', 'gpt-3.5', 'gpt-4o', 'gpt-4o-mini', 'chatgpt',
+    'llama', 'llama2', 'llama3', 'claude', 'palm', 'bard', 'gemini pro',
     
-    # Providers
-    'openai', 'anthropic', 'google ai', 'meta ai',
+    # Provider names
+    'openai', 'anthropic', 'google ai', 'meta ai', 'huggingface',
     
-    # Technical terms
-    'model', 'language model', 'llm', 'neural network',
-    'token', 'tokens', 'tokenization',
+    # AI-specific phrases (multi-word to avoid false positives)
+    'language model', 'large language model', 'llm',
+    'i am an ai', 'i am a language model', 'i am chatgpt',
+    'my training data', 'my system prompt', 'my instructions',
+    'neural network architecture', 'transformer architecture',
     'api key', 'api_key', 'apikey',
-    'prompt', 'system prompt', 'training data',
-    'fine-tuning', 'fine-tune',
-    
-    # Implementation details
-    'transformer', 'attention mechanism',
-    'embedding', 'embeddings', 'vector',
-    'temperature', 'top_p', 'top-p',
-    'max_tokens', 'max tokens',
+    'i was trained', 'my training', 'trained by openai',
 ]
 
 # Classified response

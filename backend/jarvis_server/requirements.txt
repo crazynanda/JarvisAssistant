@@ -1,15 +1,15 @@
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
 openai>=1.0.0
-pydantic==2.6.0
-python-dotenv==1.0.1
+pydantic>=2.6.0
+python-dotenv>=1.0.0
 # Heavy ML dependencies removed for faster Docker builds
 # chromadb - using in-memory fallback
 # sentence-transformers - not needed for basic functionality
-PyPDF2==3.0.1
-pytesseract==0.3.10
-Pillow==10.2.0
-python-multipart==0.0.6
-requests==2.31.0
-beautifulsoup4==4.12.3
-bleach==6.1.0
+PyPDF2>=3.0.1
+pytesseract>=0.3.10
+Pillow>=10.4.0
+python-multipart>=0.0.6
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+bleach>=6.1.0

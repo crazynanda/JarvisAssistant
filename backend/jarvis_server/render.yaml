@@ -1,0 +1,16 @@
+# Render.com deployment configuration
+# This file tells Render how to deploy the J.A.R.V.I.S backend
+
+services:
+  - type: web
+    name: jarvis-assistant-api
+    runtime: python
+    region: oregon # or choose: singapore, frankfurt, ohio
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+      - key: OPENAI_API_KEY
+        sync: false # You'll set this in Render dashboard

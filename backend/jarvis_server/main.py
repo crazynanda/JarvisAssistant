@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File, Request
+from fastapi import FastAPI, HTTPException, UploadFile, File, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from openai import OpenAI
@@ -258,7 +258,7 @@ async def health_check():
     }
 
 @app.post("/ask", response_model=AskResponse)
-async def ask_jarvis(request: Request, ask_request: AskRequest):
+async def ask_jarvis(request: Request, ask_request: AskRequest, background_tasks: BackgroundTasks):
     """
     Process user input and return AI-generated response
     
@@ -411,8 +411,9 @@ async def ask_jarvis(request: Request, ask_request: AskRequest):
                 msg_count = memory.get_message_count()
                 if msg_count > 0 and msg_count % 20 == 0:
                     logger.info("Triggering conversation summarization...")
-                    # Run summarization (synchronous for now, could be background task)
-                    _summarize_conversation(memory, client)
+                    logger.info("Triggering conversation summarization...")
+                    # Run summarization in background to avoid blocking response
+                    background_tasks.add_task(_summarize_conversation, memory, client)
                     
             except Exception as e:
                 logger.warning(f"Error saving to memory: {e}")

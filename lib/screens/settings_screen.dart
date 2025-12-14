@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/wake_word_manager.dart';
+import '../widgets/theme_selector.dart';
 
 class SettingsScreen extends StatefulWidget {
   final bool wakeWordEnabled;
@@ -23,11 +25,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late bool _contactsEnabled;
   late bool _sensorsEnabled;
 
+  // Background wake word
+  bool _backgroundWakeWordEnabled = false;
+  String _picovoiceAccessKey = '';
+  final _accessKeyController = TextEditingController();
+  bool _isLoadingBackgroundService = false;
+
   @override
   void initState() {
     super.initState();
     _wakeWordEnabled = widget.wakeWordEnabled;
     _loadPermissions();
+    _loadBackgroundWakeWordSettings();
   }
 
   Future<void> _loadPermissions() async {
@@ -44,6 +53,118 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _contactsEnabled = contacts;
       _sensorsEnabled = sensors;
     });
+  }
+
+  Future<void> _loadBackgroundWakeWordSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = prefs.getString('picovoice_access_key') ?? '';
+    final enabled = WakeWordManager.instance.isRunning;
+
+    setState(() {
+      _picovoiceAccessKey = key;
+      _accessKeyController.text = key;
+      _backgroundWakeWordEnabled = enabled;
+    });
+  }
+
+  Future<void> _toggleBackgroundWakeWord(bool enabled) async {
+    if (enabled && _picovoiceAccessKey.isEmpty) {
+      _showAccessKeyDialog();
+      return;
+    }
+
+    setState(() {
+      _isLoadingBackgroundService = true;
+    });
+
+    try {
+      if (enabled) {
+        await WakeWordManager.instance.startListening(_picovoiceAccessKey);
+      } else {
+        await WakeWordManager.instance.stopListening();
+      }
+
+      setState(() {
+        _backgroundWakeWordEnabled = enabled;
+        _isLoadingBackgroundService = false;
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingBackgroundService = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to toggle wake word service: $e')),
+        );
+      }
+    }
+  }
+
+  void _showAccessKeyDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E2749),
+        title: const Text(
+          'Picovoice Access Key',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Get your free access key from:',
+              style: TextStyle(color: Colors.white70),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'https://console.picovoice.ai/',
+              style: TextStyle(color: Color(0xFF00A8E8)),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _accessKeyController,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: 'Enter access key',
+                hintStyle: const TextStyle(color: Colors.white30),
+                filled: true,
+                fillColor: const Color(0xFF0A0E27),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final key = _accessKeyController.text.trim();
+              if (key.isNotEmpty) {
+                final navigator = Navigator.of(context);
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setString('picovoice_access_key', key);
+                setState(() {
+                  _picovoiceAccessKey = key;
+                });
+                if (mounted) {
+                  navigator.pop();
+                  _toggleBackgroundWakeWord(true);
+                }
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -69,6 +190,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // Theme Section
+          _buildSectionHeader('App Theme'),
+          const SizedBox(height: 12),
+
+          const ThemeSelector(),
+          const SizedBox(height: 32),
+
           // Wake Word Section
           _buildSectionHeader('Wake Word Detection'),
           const SizedBox(height: 12),
@@ -77,6 +205,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 12),
 
           _buildPrivacyInfo(),
+          const SizedBox(height: 32),
+
+          // Background Wake Word Section
+          _buildSectionHeader('Background Listening'),
+          const SizedBox(height: 12),
+
+          _buildBackgroundWakeWordToggle(),
+          const SizedBox(height: 12),
+
+          _buildBackgroundInfo(),
           const SizedBox(height: 32),
 
           // Voice Settings Section
@@ -339,6 +477,153 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 4),
                 Text(
                   'Audio processed locally; no cloud streaming. All voice recognition happens on your device.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.white.withValues(alpha: 0.6),
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBackgroundWakeWordToggle() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [
+            Color(0xFF1E2749),
+            Color(0xFF2A3254),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: _backgroundWakeWordEnabled
+              ? const Color(0xFF00FF88).withValues(alpha: 0.3)
+              : Colors.white.withValues(alpha: 0.1),
+          width: 1,
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => _toggleBackgroundWakeWord(!_backgroundWakeWordEnabled),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [
+                        const Color(0xFF00FF88).withValues(alpha: 0.3),
+                        const Color(0xFF00FF88).withValues(alpha: 0.1),
+                      ],
+                    ),
+                  ),
+                  child: _isLoadingBackgroundService
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(
+                          _backgroundWakeWordEnabled
+                              ? Icons.hearing
+                              : Icons.hearing_disabled,
+                          color: _backgroundWakeWordEnabled
+                              ? const Color(0xFF00FF88)
+                              : Colors.white30,
+                          size: 24,
+                        ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Background Wake Word',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white.withValues(alpha: 0.9),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _backgroundWakeWordEnabled
+                            ? 'Listening even when app is closed'
+                            : 'Works like Siri/Google Assistant',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.white.withValues(alpha: 0.5),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Switch(
+                  value: _backgroundWakeWordEnabled,
+                  onChanged: _isLoadingBackgroundService
+                      ? null
+                      : (value) => _toggleBackgroundWakeWord(value),
+                  activeThumbColor: const Color(0xFF00FF88),
+                  activeTrackColor:
+                      const Color(0xFF00FF88).withValues(alpha: 0.3),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBackgroundInfo() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFF8800).withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFFFF8800).withValues(alpha: 0.2),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.battery_alert,
+            color: const Color(0xFFFF8800).withValues(alpha: 0.7),
+            size: 20,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Battery Usage',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFFFF8800).withValues(alpha: 0.9),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Background listening uses more battery. Requires Picovoice access key (free at console.picovoice.ai).',
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.white.withValues(alpha: 0.6),

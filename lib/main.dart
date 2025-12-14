@@ -1,17 +1,34 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:provider/provider.dart';
 import 'services/jarvis_voice.dart';
 import 'services/jarvis_listener.dart';
 import 'services/file_upload_service.dart';
 import 'services/jarvis_api_service.dart';
+import 'services/wake_word_manager.dart';
 import 'screens/settings_screen.dart';
+import 'screens/themed_home_screen.dart';
 import 'package:image_picker/image_picker.dart';
 import 'widgets/jarvis_orb.dart';
 import 'widgets/typing_indicator.dart';
+import 'themes/theme_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const JarvisAssistantApp());
+
+  // Initialize wake word manager
+  await WakeWordManager.instance.initialize();
+
+  // Initialize theme provider
+  final themeProvider = ThemeProvider();
+  await themeProvider.init();
+
+  runApp(
+    ChangeNotifierProvider.value(
+      value: themeProvider,
+      child: const JarvisAssistantApp(),
+    ),
+  );
 }
 
 class JarvisAssistantApp extends StatelessWidget {
@@ -19,18 +36,28 @@ class JarvisAssistantApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'J.A.R.V.I.S',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF00A8E8),
-          brightness: Brightness.dark,
-        ),
-        useMaterial3: true,
-        scaffoldBackgroundColor: const Color(0xFF0A0E27),
-      ),
-      home: const ChatScreen(),
+    return Consumer<ThemeProvider>(
+      builder: (context, themeProvider, child) {
+        final theme = themeProvider.theme;
+
+        return MaterialApp(
+          title: 'J.A.R.V.I.S',
+          debugShowCheckedModeBanner: false,
+          theme: ThemeData(
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: theme.primaryColor,
+              brightness: Brightness.dark,
+              primary: theme.primaryColor,
+              secondary: theme.accentColor,
+              surface: theme.surfaceColor,
+            ),
+            useMaterial3: true,
+            scaffoldBackgroundColor: theme.backgroundColor,
+            fontFamily: theme.fontFamily,
+          ),
+          home: const ThemedHomeScreen(),
+        );
+      },
     );
   }
 }
