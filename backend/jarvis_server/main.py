@@ -557,6 +557,113 @@ Content:
         logger.error(f"Error analyzing file: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
+
+# ===== ELEVENLABS TTS PROXY =====
+# Securely proxies TTS requests to ElevenLabs, keeping API key on server
+
+import httpx
+
+# ElevenLabs configuration
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
+ELEVENLABS_DEFAULT_VOICE = os.getenv("ELEVENLABS_DEFAULT_VOICE", "pNInz6obpgDQGcFmaJgB")  # Adam voice
+
+# Available voices for clients to choose from
+ELEVENLABS_VOICES = {
+    "adam": "pNInz6obpgDQGcFmaJgB",
+    "antoni": "ErXwobaYiN019PkySvjV", 
+    "rachel": "21m00Tcm4TlvDq8ikWAM",
+    "domi": "AZnzlk1XvdvUeBnXmlld",
+    "bella": "EXAVITQu4vr4xnSDxMaL",
+    "elli": "MF3mGyEYCl7XYWbV9V6O",
+    "josh": "TxGEqnHWrfWFTfGW9XjX",
+    "arnold": "VR6AewLTigWG4xSOukaG",
+    "sam": "yoZ06aMxZJJ28mfd3POQ",
+}
+
+class SpeakRequest(BaseModel):
+    text: str
+    voice: Optional[str] = None  # Voice name or ID
+
+class SpeakResponse(BaseModel):
+    success: bool
+    message: str
+
+@app.post("/speak")
+async def speak_text(request: SpeakRequest):
+    """
+    Text-to-Speech endpoint using ElevenLabs
+    Returns audio/mpeg stream
+    """
+    if not ELEVENLABS_API_KEY:
+        raise HTTPException(status_code=503, detail="TTS service not configured")
+    
+    if not request.text or not request.text.strip():
+        raise HTTPException(status_code=400, detail="Text is required")
+    
+    # Limit text length to prevent abuse
+    if len(request.text) > 1000:
+        raise HTTPException(status_code=400, detail="Text too long (max 1000 characters)")
+    
+    # Resolve voice ID
+    voice_id = ELEVENLABS_DEFAULT_VOICE
+    if request.voice:
+        voice_lower = request.voice.lower()
+        if voice_lower in ELEVENLABS_VOICES:
+            voice_id = ELEVENLABS_VOICES[voice_lower]
+        elif len(request.voice) > 10:  # Likely a voice ID
+            voice_id = request.voice
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
+                headers={
+                    "xi-api-key": ELEVENLABS_API_KEY,
+                    "Content-Type": "application/json",
+                    "Accept": "audio/mpeg",
+                },
+                json={
+                    "text": request.text,
+                    "model_id": "eleven_monolingual_v1",
+                    "voice_settings": {
+                        "stability": 0.5,
+                        "similarity_boost": 0.75,
+                    }
+                },
+                timeout=30.0
+            )
+            
+            if response.status_code == 200:
+                from fastapi.responses import Response
+                return Response(
+                    content=response.content,
+                    media_type="audio/mpeg",
+                    headers={"Content-Disposition": "attachment; filename=speech.mp3"}
+                )
+            elif response.status_code == 401:
+                logger.error("ElevenLabs API key invalid")
+                raise HTTPException(status_code=503, detail="TTS service configuration error")
+            else:
+                logger.error(f"ElevenLabs error: {response.status_code}")
+                raise HTTPException(status_code=502, detail="TTS service error")
+                
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="TTS service timeout")
+    except Exception as e:
+        logger.error(f"TTS error: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.get("/voices")
+async def get_voices():
+    """Get available voice options"""
+    return {
+        "voices": [
+            {"id": v, "name": k.title()} 
+            for k, v in ELEVENLABS_VOICES.items()
+        ],
+        "default": ELEVENLABS_DEFAULT_VOICE
+    }
+
 if __name__ == "__main__":
     import uvicorn
     

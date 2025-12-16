@@ -4,6 +4,7 @@ import 'package:speech_to_text/speech_to_text.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'elevenlabs_service.dart';
 
 /// JarvisVoice - Voice recognition and text-to-speech service
 /// Handles listening for voice commands and speaking responses
@@ -11,8 +12,11 @@ class JarvisVoice {
   // Speech to Text instance
   final SpeechToText _speech = SpeechToText();
 
-  // Text to Speech instance
+  // Text to Speech instance (fallback)
   final FlutterTts _tts = FlutterTts();
+
+  // ElevenLabs service (premium voice)
+  final ElevenLabsService _elevenLabs = ElevenLabsService();
 
   // State management
   bool _isInitialized = false;
@@ -56,8 +60,11 @@ class JarvisVoice {
         return false;
       }
 
-      // Initialize Text to Speech
+      // Initialize Text to Speech (fallback)
       await _configureTts();
+
+      // Initialize ElevenLabs
+      await _elevenLabs.initialize();
 
       _isInitialized = true;
       if (kDebugMode) {
@@ -242,6 +249,21 @@ class JarvisVoice {
         print('Speaking: $text');
       }
 
+      // Try ElevenLabs first if enabled
+      if (_elevenLabs.isEnabled) {
+        try {
+          await _elevenLabs.speak(text);
+          _isSpeaking = false;
+          return;
+        } catch (e) {
+          if (kDebugMode) {
+            print('ElevenLabs failed, falling back to TTS: $e');
+          }
+          // Fall through to flutter_tts
+        }
+      }
+
+      // Use flutter_tts as fallback
       await _tts.speak(text);
     } catch (e) {
       _isSpeaking = false;
@@ -315,6 +337,9 @@ class JarvisVoice {
 
   /// Check if initialized
   bool get isInitialized => _isInitialized;
+
+  /// Get ElevenLabs service for configuration
+  ElevenLabsService get elevenLabs => _elevenLabs;
 
   /// Get available locales for speech recognition
   Future<List<String>> getAvailableLocales() async {
