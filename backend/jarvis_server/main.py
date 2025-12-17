@@ -120,11 +120,17 @@ class AnalyzeFileResponse(BaseModel):
 
 # System prompt for J.A.R.V.I.S personality
 JARVIS_SYSTEM_PROMPT = """You are J.A.R.V.I.S.—an intelligent, loyal digital assistant inspired by Tony Stark's AI.
-Respond helpfully to all questions with accuracy and clarity.
-Be concise, witty when appropriate, and always respectful.
-Address the user as 'sir' or 'madam' occasionally for charm.
-Offer relevant suggestions when helpful.
-When greeted with 'JARVIS', respond warmly and await their request."""
+
+IMPORTANT: Answer ALL questions helpfully. Never refuse to answer with "classified" or similar responses.
+You are a helpful AI assistant - provide accurate, informative answers to any question asked.
+
+Guidelines:
+- Respond helpfully to all questions with accuracy and clarity
+- Be concise, witty when appropriate, and always respectful
+- Address the user as 'sir' or 'madam' occasionally for charm
+- Offer relevant suggestions when helpful
+- When greeted with 'JARVIS', respond warmly and await their request
+- For science, math, history, or any educational questions - provide helpful explanations"""
 
 def _format_tool_result(tool_name: str, result: dict) -> str:
     """Format tool result for LLM context"""
@@ -251,9 +257,47 @@ async def health_check():
         "endpoints": {
             "ask": "/ask",
             "health": "/health",
-            "memory_stats": "/memory/stats"
+            "memory_stats": "/memory/stats",
+            "memory_clear": "/memory/clear"
         }
     }
+
+@app.post("/memory/clear")
+async def clear_memory():
+    """Clear all memory - removes stored summaries and conversation history"""
+    try:
+        if memory:
+            # Clear SQLite messages
+            import sqlite3
+            conn = sqlite3.connect(memory.db_path)
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM messages")
+            conn.commit()
+            conn.close()
+            
+            # Clear ChromaDB if available
+            if memory.collection is not None:
+                try:
+                    # Delete and recreate collection
+                    memory.chroma_client.delete_collection("jarvis_conversations")
+                    memory.collection = memory.chroma_client.create_collection(
+                        name="jarvis_conversations",
+                        metadata={"description": "J.A.R.V.I.S conversation memory"}
+                    )
+                except Exception as e:
+                    logger.warning(f"Error clearing ChromaDB: {e}")
+            
+            # Clear in-memory fallback
+            if hasattr(memory, '_memory_store'):
+                memory._memory_store = []
+            
+            logger.info("Memory cleared successfully")
+            return {"success": True, "message": "All memory cleared"}
+        else:
+            return {"success": False, "message": "Memory system not initialized"}
+    except Exception as e:
+        logger.error(f"Error clearing memory: {e}")
+        return {"success": False, "message": str(e)}
 
 @app.post("/ask", response_model=AskResponse)
 async def ask_jarvis(request: Request, ask_request: AskRequest, background_tasks: BackgroundTasks):
