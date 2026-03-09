@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 import '../services/wake_word_manager.dart';
 import '../services/elevenlabs_service.dart';
 import '../widgets/theme_selector.dart';
+import 'user_profile_screen.dart';
+import 'wake_word_test_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   final bool wakeWordEnabled;
@@ -115,6 +119,128 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _testMicrophone() async {
+    // Check microphone permission first
+    final micStatus = await Permission.microphone.status;
+    if (!micStatus.isGranted) {
+      final result = await Permission.microphone.request();
+      if (!result.isGranted) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Microphone permission denied. Please enable in Settings.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+    }
+
+    // Show testing dialog
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          backgroundColor: const Color(0xFF1E2749),
+          title: const Row(
+            children: [
+              Icon(Icons.mic, color: Colors.green, size: 28),
+              SizedBox(width: 12),
+              Text(
+                'Testing Microphone',
+                style: TextStyle(color: Colors.white),
+              ),
+            ],
+          ),
+          content: const Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(color: Color(0xFF00A8E8)),
+              SizedBox(height: 20),
+              Text(
+                'Speak now...',
+                style: TextStyle(color: Colors.white70),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Say "JARVIS" to test wake word',
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Initialize speech and test
+    final speech = SpeechToText();
+    bool isAvailable = await speech.initialize(
+      onError: (error) {
+        if (mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Speech error: ${error.errorMsg}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      },
+      onStatus: (status) {
+        if (status == 'done' || status == 'notListening') {
+          if (mounted) {
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Microphone test completed!'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        }
+      },
+    );
+
+    if (!isAvailable) {
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Speech recognition not available on this device'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    await speech.listen(
+      onResult: (result) {
+        if (result.recognizedWords.isNotEmpty) {
+          if (mounted) {
+            Navigator.pop(context);
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Heard: "${result.recognizedWords}"'),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        }
+      },
+      listenFor: const Duration(seconds: 5),
+      pauseFor: const Duration(seconds: 3),
+    );
+  }
+
   void _showAccessKeyDialog() {
     showDialog(
       context: context,
@@ -205,6 +331,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // User Profile Section
+          _buildSectionHeader('User Profile'),
+          const SizedBox(height: 12),
+
+          _buildSettingsTile(
+            icon: Icons.person_outline,
+            title: 'Personalization',
+            subtitle: 'Customize how J.A.R.V.I.S addresses you',
+            trailing: const Icon(Icons.chevron_right, color: Colors.white30),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const UserProfileScreen(),
+                ),
+              );
+            },
+          ),
+          const SizedBox(height: 32),
+
           // Theme Section
           _buildSectionHeader('App Theme'),
           const SizedBox(height: 12),
@@ -220,6 +366,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 12),
 
           _buildPrivacyInfo(),
+          const SizedBox(height: 12),
+
+          // Wake Word Test Button
+          _buildSettingsTile(
+            icon: Icons.bug_report,
+            title: 'Test Wake Word',
+            subtitle: 'Debug and test wake word detection',
+            trailing: const Icon(Icons.chevron_right, color: Colors.white30),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const WakeWordTestScreen(),
+                ),
+              );
+            },
+          ),
           const SizedBox(height: 32),
 
           // Background Wake Word Section
@@ -358,6 +521,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
               });
               await SettingsManager.setPermission('sensors', value);
             },
+          ),
+
+          const SizedBox(height: 16),
+
+          // Microphone Permission Button
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.symmetric(vertical: 8),
+            child: ElevatedButton.icon(
+              onPressed: () async {
+                final status = await Permission.microphone.request();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        status.isGranted 
+                            ? 'Microphone permission granted!' 
+                            : 'Microphone permission denied. Please enable in Settings.',
+                      ),
+                      backgroundColor: status.isGranted ? Colors.green : Colors.red,
+                    ),
+                  );
+                }
+              },
+              icon: const Icon(Icons.mic, color: Colors.white),
+              label: const Text(
+                'Request Microphone Permission',
+                style: TextStyle(color: Colors.white),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF00A8E8),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+
+          // Test Microphone Button
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.symmetric(vertical: 8),
+            child: ElevatedButton.icon(
+              onPressed: () => _testMicrophone(),
+              icon: const Icon(Icons.mic_external_on, color: Colors.white),
+              label: const Text(
+                'Test Microphone',
+                style: TextStyle(color: Colors.white),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Color(0xFF00A8E8),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
           ),
 
           const SizedBox(height: 32),
@@ -1024,11 +1239,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   style: const TextStyle(color: Colors.white54, fontSize: 12),
                 ),
                 onTap: () async {
+                  final navigator = Navigator.of(context);
                   await _elevenLabs.setVoice(voice['id']!, voice['name']!);
                   setState(() {
                     _selectedVoiceName = voice['name'];
                   });
-                  if (mounted) Navigator.pop(context);
+                  if (mounted) navigator.pop();
                 },
               );
             },
@@ -1084,11 +1300,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               backgroundColor: const Color(0xFF9B59B6),
             ),
             onPressed: () async {
+              final navigator = Navigator.of(context);
               await _elevenLabs.setEnabled(true);
               setState(() {
                 _elevenLabsEnabled = true;
               });
-              if (mounted) Navigator.pop(context);
+              if (mounted) navigator.pop();
             },
             child: const Text('Enable'),
           ),

@@ -9,6 +9,7 @@ import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import ai.picovoice.porcupine.*
+import java.io.File
 
 class WakeWordService : Service() {
     
@@ -17,6 +18,7 @@ class WakeWordService : Service() {
         const val CHANNEL_ID = "jarvis_wake_word_channel"
         const val NOTIFICATION_ID = 1001
         const val ACTION_STOP = "com.jarvis.STOP_WAKE_WORD"
+        const val WAKE_WORD_MODEL = "jarvis_en_android_v4_0_0.ppn"
         
         var isRunning = false
             private set
@@ -30,6 +32,26 @@ class WakeWordService : Service() {
         Log.d(TAG, "WakeWordService onCreate")
         createNotificationChannel()
         acquireWakeLock()
+        copyModelFile()  // Copy model file to internal storage
+    }
+    
+    // Copy model file from assets to internal storage on first run
+    private fun copyModelFile() {
+        val modelFile = File(filesDir, WAKE_WORD_MODEL)
+        if (!modelFile.exists()) {
+            try {
+                applicationContext.assets.open(WAKE_WORD_MODEL)
+                    .use { input ->
+                        modelFile.outputStream().use { output ->
+                            input.copyTo(output)
+                        }
+                    }
+                Log.d(TAG, "✅ Wake word model copied to internal storage")
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Failed to copy wake word model: ${e.message}")
+                stopSelf()
+            }
+        }
     }
     
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
