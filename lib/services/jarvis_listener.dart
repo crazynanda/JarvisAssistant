@@ -4,12 +4,13 @@ import 'package:speech_to_text/speech_to_text.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'speech_manager.dart';
 
 /// JarvisListener - Background wake word detection service
 /// Continuously listens for the wake word "JARVIS" at low power
 class JarvisListener {
-  // Speech to Text instance for wake word detection
-  final SpeechToText _speech = SpeechToText();
+  // Shared SpeechManager instance
+  final SpeechManager _speechManager = SpeechManager();
 
   // Audio player for activation sound
   final AudioPlayer _audioPlayer = AudioPlayer();
@@ -45,39 +46,12 @@ class JarvisListener {
   static const String _activationSoundPath = 'sounds/activation.mp3';
 
   /// Initialize the wake word listener
-  Future<bool> initialize() async {
-    try {
-      // Request microphone permission
-      final micPermission = await Permission.microphone.request();
-      if (!micPermission.isGranted) {
-        _handleError('Microphone permission denied for wake word detection');
-        return false;
-      }
-
-      // Initialize Speech to Text
-      final speechAvailable = await _speech.initialize(
-        onError: (error) => _handleSpeechError(error.errorMsg),
-        onStatus: (status) => _handleStatusChange(status),
-      );
-
-      if (!speechAvailable) {
-        _handleError(
-            'Speech recognition not available for wake word detection');
-        return false;
-      }
-
-      // Preload activation sound
-      await _audioPlayer.setSource(AssetSource(_activationSoundPath));
-
-      _isInitialized = true;
-      if (kDebugMode) {
-        print('JarvisListener initialized successfully');
-      }
-      return true;
-    } catch (e) {
-      _handleError('Wake word listener initialization error: $e');
-      return false;
+  Future<bool> initialize({bool skipPermissionCheck = false}) async {
+    // Temporarily disabled - using SpeechManager in Phase 2
+    if (kDebugMode) {
+      print('JarvisListener.initialize() - DISABLED temporarily');
     }
+    return false;
   }
 
   /// Start listening for wake word in background
@@ -99,31 +73,11 @@ class JarvisListener {
 
   /// Internal method to start wake word detection
   Future<void> _startWakeWordDetection() async {
-    try {
-      _isListening = true;
-      onListeningStateChanged?.call(true);
-
-      if (kDebugMode) {
-        print('Started listening for wake word: $_wakeWord');
-      }
-
-      // Start continuous listening for wake word
-      await _speech.listen(
-        onResult: (result) => _handleWakeWordResult(result),
-        listenFor: const Duration(
-            minutes: 10), // Long duration for continuous listening
-        pauseFor: const Duration(seconds: 10), // Long pause to keep listening
-        localeId: 'en_US',
-        listenOptions: SpeechListenOptions(
-          partialResults: true,
-          cancelOnError: false,
-          listenMode: ListenMode.confirmation,
-        ),
-      );
-    } catch (e) {
-      _handleError('Start wake word detection error: $e');
-      _scheduleRestart();
+    // Temporarily disabled - using SpeechManager in Phase 2
+    if (kDebugMode) {
+      print('_startWakeWordDetection() - DISABLED temporarily');
     }
+    return;
   }
 
   /// Handle speech recognition results for wake word detection
@@ -178,7 +132,7 @@ class JarvisListener {
 
     try {
       // Stop wake word listening temporarily
-      await _speech.stop();
+      await _speechManager.stopListening('wake_word');
       _isListening = false;
       onListeningStateChanged?.call(false);
 
@@ -257,7 +211,7 @@ class JarvisListener {
       _idleTimer?.cancel();
       _restartTimer?.cancel();
 
-      await _speech.stop();
+      await _speechManager.stopListening('wake_word');
       _isListening = false;
       _isActive = false;
       onListeningStateChanged?.call(false);
@@ -332,7 +286,7 @@ class JarvisListener {
   void dispose() {
     _idleTimer?.cancel();
     _restartTimer?.cancel();
-    _speech.stop();
+    _speechManager.stopListening('wake_word');
     _audioPlayer.dispose();
     _isListening = false;
     _isActive = false;

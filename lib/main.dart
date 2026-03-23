@@ -5,7 +5,6 @@ import 'services/jarvis_voice.dart';
 import 'services/jarvis_listener.dart';
 import 'services/file_upload_service.dart';
 import 'services/jarvis_api_service.dart';
-import 'services/wake_word_manager.dart';
 import 'screens/settings_screen.dart';
 import 'screens/themed_home_screen.dart';
 import 'package:image_picker/image_picker.dart';
@@ -15,9 +14,6 @@ import 'themes/theme_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Initialize wake word manager
-  await WakeWordManager.instance.initialize();
 
   // Initialize theme provider
   final themeProvider = ThemeProvider();

@@ -1,11 +1,14 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/jarvis_voice.dart';
 import '../services/jarvis_api_service.dart';
 import '../services/chat_history_service.dart';
 import '../services/user_profile_service.dart';
-import '../services/unified_wake_word_service.dart';
+import '../services/jarvis_listener.dart';
 import '../models/message_model.dart';
 import '../widgets/quick_action_chips.dart';
 import 'settings_screen.dart';
@@ -25,7 +28,7 @@ class Message {
   });
 }
 
-/// Themed home screen with Alexa-style wake word detection
+/// Themed home screen for J.A.R.V.I.S voice assistant
 class ThemedHomeScreen extends StatefulWidget {
   const ThemedHomeScreen({super.key});
 
@@ -40,26 +43,22 @@ class _ThemedHomeScreenState extends State<ThemedHomeScreen> {
   final JarvisApiService _apiService = JarvisApiService();
   final ChatHistoryService _chatHistory = ChatHistoryService();
   final UserProfileService _userProfile = UserProfileService();
-  final UnifiedWakeWordService _wakeWordService = UnifiedWakeWordService();
+  final JarvisListener _wakeWordListener = JarvisListener();
   
-  // State management
-  bool _isListening = false;
   bool _isInitialized = false;
-  bool _wakeWordDetected = false;
-  bool _wakeWordEnabled = true;
   bool _isProcessing = false;
-  bool _isPushToTalkActive = false;
+  bool _isListening = false;
+  bool _wakeWordActive = false;
+  bool _wakeWordEnabled = true;
+  bool _microphonePermissionGranted = false;
   
-  // Timing
   DateTime? _lastGreetingTime;
   Timer? _commandTimeoutTimer;
-  static const Duration _commandTimeout = Duration(seconds: 5);
+  static const Duration _commandTimeout = Duration(seconds: 30);
 
   @override
   void initState() {
     super.initState();
-    
-    // Delay initialization
     Future.delayed(Duration.zero, () {
       _initializeApp();
     });
@@ -68,24 +67,53 @@ class _ThemedHomeScreenState extends State<ThemedHomeScreen> {
   Future<void> _initializeApp() async {
     debugPrint('[J.A.R.V.I.S] Starting app initialization...');
     
-    await _loadSettings();
-    debugPrint('[J.A.R.V.I.S] Settings loaded: wakeWordEnabled=$_wakeWordEnabled');
-    
-    await _loadChatHistory();
-    debugPrint('[J.A.R.V.I.S] Chat history loaded');
-    
-    await _initializeVoiceService();
-    debugPrint('[J.A.R.V.I.S] Voice service initialized');
-    
-    await _initializeWakeWordService();
-    debugPrint('[J.A.R.V.I.S] Wake word service initialized');
+    try {
+      // Request microphone permission first
+      _microphonePermissionGranted = await _requestMicrophonePermission();
+      if (!_microphonePermissionGranted) {
+        debugPrint('[J.A.R.V.I.S] Microphone permission denied');
+        if (mounted) {
+          _showError('Microphone permission required for voice features');
+        }
+        return;
+      }
+      
+      await _loadSettings();
+      debugPrint('[J.A.R.V.I.S] Settings loaded');
+      
+      await _loadChatHistory();
+      debugPrint('[J.A.R.V.I.S] Chat history loaded');
+      
+      await _initializeVoiceService();
+      debugPrint('[J.A.R.V.I.S] Voice service initialized');
+      
+      // Temporarily disable wake word to prevent crashes
+      // await _initializeWakeWordListener();
+      debugPrint('[J.A.R.V.I.S] Wake word listener DISABLED (temporarily)');
+      
+      await _speakWelcomeMessage();
+      debugPrint('[J.A.R.V.I.S] App initialization complete');
+    } catch (e) {
+      debugPrint('[J.A.R.V.I.S] CRITICAL ERROR during initialization: $e');
+      if (mounted) {
+        _showError('App initialization failed. Please restart the app.');
+      }
+    }
+  }
+  
+  Future<bool> _requestMicrophonePermission() async {
+    try {
+      final status = await Permission.microphone.request();
+      return status.isGranted;
+    } catch (e) {
+      debugPrint('[J.A.R.V.I.S] Permission request error: $e');
+      return false;
+    }
   }
 
   Future<void> _loadSettings() async {
-    final enabled = await SettingsManager.getWakeWordEnabled();
-    setState(() {
-      _wakeWordEnabled = enabled;
-    });
+    final prefs = await SharedPreferences.getInstance();
+    _wakeWordEnabled = prefs.getBool('wake_word_enabled') ?? true;
   }
 
   Future<void> _loadChatHistory() async {
@@ -107,17 +135,13 @@ class _ThemedHomeScreenState extends State<ThemedHomeScreen> {
 
   Future<void> _initializeVoiceService() async {
     debugPrint('[J.A.R.V.I.S] Initializing voice service...');
-    final success = await _voiceService.initialize();
+    final success = await _voiceService.initialize(skipPermissionCheck: true);
     debugPrint('[J.A.R.V.I.S] Voice service initialize result: $success');
     setState(() => _isInitialized = success);
 
     if (success) {
-      debugPrint('[J.A.R.V.I.S] Sharing SpeechToText instance with wake word service');
-      // CRITICAL: Share SpeechToText instance with wake word service
-      // This prevents conflicts - Android only supports ONE speech recognition session
-      UnifiedWakeWordService.setSharedSpeechInstance(_voiceService.speechInstance);
-
-      // Set up voice callbacks
+      debugPrint('[J.A.R.V.I.S] Setting up voice callbacks');
+      
       _voiceService.onResult = (text) {
         if (text.isNotEmpty) {
           _addMessage(text, isUser: true);
@@ -131,52 +155,60 @@ class _ThemedHomeScreenState extends State<ThemedHomeScreen> {
         debugPrint('[J.A.R.V.I.S] Voice listening state: $isListening');
         setState(() => _isListening = isListening);
         
-        // Coordinate with wake word service
-        if (isListening) {
-          _wakeWordService.pause();
-        } else {
-          _wakeWordService.resume();
-        }
+        // If voice service stops listening, restart wake word listener if enabled (disabled for now)
+        // if (!_isListening && _wakeWordEnabled) {
+        //   _restartWakeWordListener();
+        // }
       };
-
-      // Welcome message
-      _speakWelcomeMessage();
     }
   }
 
-  Future<void> _initializeWakeWordService() async {
-    debugPrint('[J.A.R.V.I.S] Initializing wake word service... preferredGreeting: ${_userProfile.preferredGreeting}');
-    
-    // Initialize with user's preferred greeting
-    final success = await _wakeWordService.initialize(
-      preferredGreeting: _userProfile.preferredGreeting,
-    );
-    
-    debugPrint('[J.A.R.V.I.S] Wake word service initialize result: $success');
+  Future<void> _initializeWakeWordListener() async {
+    debugPrint('[J.A.R.V.I.S] Wake word listener is DISABLED (temporarily)');
+    // Temporarily disabled to prevent crashes
+    // Will be re-enabled in Phase 2 with proper SpeechManager implementation
+    return;
+  }
 
-    if (success) {
-      debugPrint('[J.A.R.V.I.S] Setting up wake word callbacks');
-      // Set up wake word callback
-      _wakeWordService.onWakeWordDetected = _handleWakeWordDetected;
-      _wakeWordService.onError = (error) => _showError('Wake word: $error');
-      
-      // Auto-start if enabled
-      if (_wakeWordEnabled) {
-        debugPrint('[J.A.R.V.I.S] Starting wake word detection (enabled)');
-        await _wakeWordService.start();
-      } else {
-        debugPrint('[J.A.R.V.I.S] Wake word detection NOT started (disabled in settings)');
-      }
-
-      // Check if launched by wake word
-      final wasLaunched = await _wakeWordService.wasLaunchedByWakeWord();
-      if (wasLaunched) {
-        debugPrint('[J.A.R.V.I.S] App was launched by wake word');
-        _handleWakeWordDetected();
-      }
-    } else {
-      debugPrint('[J.A.R.V.I.S] WAKE WORD SERVICE FAILED TO INITIALIZE!');
+  Future<void> _handleWakeWordDetected() async {
+    debugPrint('[J.A.R.V.I.S] Wake word detected!');
+    
+    // Stop wake word listener to free up speech recognition
+    await _wakeWordListener.stopListening();
+    
+    setState(() => _wakeWordActive = true);
+    
+    final now = DateTime.now();
+    if (_lastGreetingTime == null || 
+        now.difference(_lastGreetingTime!) > const Duration(seconds: 30)) {
+      final greeting = _userProfile.getGreeting();
+      _lastGreetingTime = now;
+      await _voiceService.speak(greeting);
     }
+    
+    // Wait for greeting to finish
+    await Future.delayed(const Duration(milliseconds: 500));
+    
+    // Start voice service to listen for command
+    if (_voiceService.isInitialized && !_voiceService.isListening) {
+      await _voiceService.listen();
+    }
+  }
+
+  void _restartWakeWordListener() {
+    // Temporarily disabled to prevent crashes
+    debugPrint('[J.A.R.V.I.S] Wake word restart disabled (temporarily)');
+    return;
+    
+    // Original implementation (will be re-enabled in Phase 2):
+    // if (!_wakeWordEnabled) return;
+    // 
+    // debugPrint('[J.A.R.V.I.S] Restarting wake word listener');
+    // _wakeWordListener.startListening().then((_) {
+    //   debugPrint('[J.A.R.V.I.S] Wake word listener restarted');
+    // }).catchError((error) {
+    //   debugPrint('[J.A.R.V.I.S] Failed to restart wake word listener: $error');
+    // });
   }
 
   Future<void> _speakWelcomeMessage() async {
@@ -193,152 +225,79 @@ class _ThemedHomeScreenState extends State<ThemedHomeScreen> {
     _userProfile.updateLastActive();
   }
 
-  /// Alexa-style wake word response
-  Future<void> _handleWakeWordDetected() async {
-    final stopwatch = Stopwatch()..start();
-    
-    if (kDebugMode) {
-      print('🎯 Wake word detected! Stopping all audio...');
-    }
-
-    // 1. STOP ALL AUDIO IMMEDIATELY (0ms)
-    await _voiceService.stopSpeaking();
-    await _voiceService.stopListening();
-    
-    // 2. Pause wake word detection while listening for command
-    _wakeWordService.pause();
-    
-    // 3. Reset state
-    _commandTimeoutTimer?.cancel();
-    setState(() {
-      _wakeWordDetected = true;
-      _isProcessing = false;
-    });
-
-    // 4. Play greeting "Yes sir" (50-100ms)
-    final greeting = "Yes ${_userProfile.preferredGreeting}";
-    await _voiceService.speak(greeting);
-
-    // 5. Start listening for command (100ms)
-    if (_voiceService.isInitialized) {
+  Future<void> _toggleListening() async {
+    if (_isListening) {
+      await _voiceService.stopListening();
+    } else {
       await _voiceService.listen();
-      
-      // Start 5-second timeout
-      _startCommandTimeout();
-    }
-
-    final elapsed = stopwatch.elapsedMilliseconds;
-    if (kDebugMode) {
-      print('✅ Wake word response time: ${elapsed}ms');
     }
   }
 
-  void _startCommandTimeout() {
-    _commandTimeoutTimer?.cancel();
-    _commandTimeoutTimer = Timer(_commandTimeout, () {
-      if (mounted && _voiceService.isListening) {
-        _voiceService.stopListening();
-        setState(() => _wakeWordDetected = false);
-        _wakeWordService.resume();
-        if (kDebugMode) print('⏱️ Command timeout - returning to idle');
-      }
-    });
-  }
-
-  void _addMessage(String text, {required bool isUser, bool saveToHistory = true, List<String>? quickActions}) {
-    final actions = !isUser && quickActions == null
-        ? QuickActionGenerator.generateActions(text)
-        : quickActions;
-
+  void _addMessage(String text, {required bool isUser}) {
     setState(() {
       _messages.add(Message(
         text: text,
         isUser: isUser,
         timestamp: DateTime.now(),
-        quickActions: actions,
       ));
     });
-
-    if (saveToHistory) {
-      _chatHistory.saveMessage(text: text, isUser: isUser, quickActions: actions);
-    }
-  }
-
-  Future<void> _processUserMessage(String userMessage) async {
-    _commandTimeoutTimer?.cancel();
     
-    setState(() => _isProcessing = true);
+    _chatHistory.saveMessage(text: text, isUser: isUser);
+  }
 
+  Future<void> _processUserMessage(String text) async {
+    if (_isProcessing) return;
+    
+    setState(() {
+      _isProcessing = true;
+    });
+    
+    _commandTimeoutTimer?.cancel();
+    _commandTimeoutTimer = Timer(_commandTimeout, () {
+      if (_isProcessing) {
+        setState(() => _isProcessing = false);
+      }
+    });
+    
     try {
-      final response = await _apiService.ask(userMessage);
-      _addMessage(response, isUser: false);
-      await _voiceService.speak(response);
-      await _userProfile.incrementConversations();
-    } catch (e) {
-      _showError('Error: $e');
-      _addMessage("I'm having trouble connecting to my servers, ${_userProfile.preferredGreeting}.", isUser: false);
-    } finally {
-      setState(() {
-        _isProcessing = false;
-        _wakeWordDetected = false;
-      });
+      _addMessage('Thinking...', isUser: false);
       
-      // Resume wake word detection after command is processed
-      _wakeWordService.resume();
-    }
-  }
-
-  /// Push-to-talk: Long press handlers
-  void _onPushToTalkStart() {
-    setState(() => _isPushToTalkActive = true);
-    // Stop wake word first to avoid conflict
-    _wakeWordService.pause();
-    _voiceService.listen();
-    if (kDebugMode) print('👆 Push-to-talk START');
-  }
-
-  void _onPushToTalkEnd() {
-    setState(() => _isPushToTalkActive = false);
-    _voiceService.stopListening();
-    // Resume wake word after command listening ends
-    _wakeWordService.resume();
-    if (kDebugMode) print('👆 Push-to-talk END');
-  }
-
-  Future<void> _toggleListening() async {
-    if (!_isInitialized) {
-      _showError('Voice service not initialized');
-      return;
-    }
-
-    if (_isListening) {
-      await _voiceService.stopListening();
-      _wakeWordService.resume();
-    } else {
-      // Stop wake word first
-      _wakeWordService.pause();
-      await _voiceService.listen();
+      final response = await _apiService.ask(text);
+      
+      _messages.removeLast();
+      
+      _addMessage(response, isUser: false);
+      
+      await _voiceService.speak(response);
+      
+    } catch (e) {
+      _messages.removeLast();
+      _addMessage('Sorry, I encountered an error. Please try again.', isUser: false);
+      _showError('Error: $e');
+    } finally {
+      setState(() => _isProcessing = false);
+      _userProfile.incrementConversations();
+      
+      // Restart wake word listener after processing command
+      _restartWakeWordListener();
     }
   }
 
   Future<void> _sendMessage() async {
     final text = _textController.text.trim();
     if (text.isEmpty) return;
-
+    
     _textController.clear();
     _addMessage(text, isUser: true);
     await _processUserMessage(text);
   }
-
-  Future<void> _toggleWakeWord(bool enabled) async {
-    setState(() => _wakeWordEnabled = enabled);
-    await SettingsManager.setWakeWordEnabled(enabled);
-
-    if (enabled) {
-      await _wakeWordService.start();
-    } else {
-      await _wakeWordService.stop();
-    }
+  
+  Future<void> _startNewChat() async {
+    setState(() {
+      _messages.clear();
+    });
+    _chatHistory.clearCurrentSession();
+    await _speakWelcomeMessage();
   }
 
   void _showError(String error) {
@@ -353,21 +312,12 @@ class _ThemedHomeScreenState extends State<ThemedHomeScreen> {
     }
   }
 
-  Future<void> _startNewChat() async {
-    await _chatHistory.startNewSession();
-    setState(() => _messages.clear());
-    
-    final welcomeMsg = 'New session started. How can I help you?';
-    _addMessage(welcomeMsg, isUser: false);
-    await _voiceService.speak(welcomeMsg);
-  }
-
   @override
   void dispose() {
     _commandTimeoutTimer?.cancel();
     _textController.dispose();
     _voiceService.dispose();
-    _wakeWordService.dispose();
+    // _wakeWordListener.dispose(); // Temporarily disabled
     super.dispose();
   }
 
@@ -376,12 +326,10 @@ class _ThemedHomeScreenState extends State<ThemedHomeScreen> {
     return ThemedChatScreen(
       messages: _messages,
       isProcessing: _isProcessing,
-      isListening: _isListening || _wakeWordDetected || _isPushToTalkActive,
+      isListening: _isListening,
       textController: _textController,
       onSend: _sendMessage,
       onMicPressed: _toggleListening,
-      onMicLongPressStart: _onPushToTalkStart,
-      onMicLongPressEnd: _onPushToTalkEnd,
       onNewChat: _startNewChat,
       onSettings: () async {
         await Navigator.push(
@@ -389,7 +337,11 @@ class _ThemedHomeScreenState extends State<ThemedHomeScreen> {
           MaterialPageRoute(
             builder: (context) => SettingsScreen(
               wakeWordEnabled: _wakeWordEnabled,
-              onWakeWordToggle: _toggleWakeWord,
+              onWakeWordToggle: (value) {
+                setState(() {
+                  _wakeWordEnabled = value;
+                });
+              },
             ),
           ),
         );

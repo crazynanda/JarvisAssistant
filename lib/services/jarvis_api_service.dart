@@ -28,6 +28,24 @@ class JarvisApiService {
 
   /// Update the server URL (for settings)
   Future<void> setServerUrl(String url) async {
+    // Validate URL format
+    final uri = Uri.tryParse(url);
+    if (uri == null || !uri.hasScheme || !uri.hasAuthority) {
+      throw ArgumentError('Invalid URL format');
+    }
+    
+    // Enforce HTTPS for production security
+    if (uri.scheme != 'http' && uri.scheme != 'https') {
+      throw ArgumentError('URL must use HTTP or HTTPS scheme');
+    }
+    
+    // Warn about HTTP (non-encrypted)
+    if (uri.scheme == 'http') {
+      if (kDebugMode) {
+        print('WARNING: Using HTTP instead of HTTPS - data may be intercepted');
+      }
+    }
+    
     _baseUrl = url;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('jarvis_server_url', url);

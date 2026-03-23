@@ -8,6 +8,8 @@ import 'hal9000_theme_ui.dart';
 import 'cyberpunk_theme_ui.dart';
 import 'minimal_dark_theme_ui.dart';
 import 'glassmorphism_theme_ui.dart';
+import 'midnight_aurora_theme_ui.dart';
+import 'neon_matrix_theme_ui.dart';
 
 /// Routes to the correct theme UI based on current theme selection
 /// Wraps theme UIs with a shared drawer for theme switching
@@ -274,6 +276,32 @@ class _ThemedChatScreenState extends State<ThemedChatScreen> {
 
       case AppThemeType.terminal:
         return TerminalThemeUI(
+          messages: widget.messages,
+          isProcessing: widget.isProcessing,
+          isListening: widget.isListening,
+          textController: widget.textController,
+          onSend: widget.onSend,
+          onMicPressed: widget.onMicPressed,
+          onMenuPressed: _openDrawer,
+          onSettingsPressed: widget.onSettings,
+          theme: theme,
+        );
+
+      case AppThemeType.midnightAurora:
+        return MidnightAuroraThemeUI(
+          messages: widget.messages,
+          isProcessing: widget.isProcessing,
+          isListening: widget.isListening,
+          textController: widget.textController,
+          onSend: widget.onSend,
+          onMicPressed: widget.onMicPressed,
+          onMenuPressed: _openDrawer,
+          onSettingsPressed: widget.onSettings,
+          theme: theme,
+        );
+
+      case AppThemeType.neonMatrix:
+        return NeonMatrixThemeUI(
           messages: widget.messages,
           isProcessing: widget.isProcessing,
           isListening: widget.isListening,

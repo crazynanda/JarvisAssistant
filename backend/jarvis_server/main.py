@@ -28,12 +28,17 @@ app = FastAPI(
 )
 
 # Configure CORS for Flutter app
+# Get allowed origins from environment variable (comma-separated list)
+# Default to localhost for development
+cors_origins = os.getenv("CORS_ORIGINS", "http://localhost,http://localhost:8080,http://127.0.0.1,http://127.0.0.1:8080")
+allowed_origins = [origin.strip() for origin in cors_origins.split(",") if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify your Flutter app's origin
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
 )
 
 # Initialize OpenAI client (supports OpenAI, Groq, LM Studio)

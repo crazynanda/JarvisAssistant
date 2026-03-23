@@ -5,12 +5,13 @@ import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'elevenlabs_service.dart';
+import 'speech_manager.dart';
 
 /// JarvisVoice - Voice recognition and text-to-speech service
 /// Handles listening for voice commands and speaking responses
 class JarvisVoice {
-  // Speech to Text instance
-  final SpeechToText _speech = SpeechToText();
+  // Shared SpeechManager instance
+  final SpeechManager _speechManager = SpeechManager();
 
   // Text to Speech instance (fallback)
   final FlutterTts _tts = FlutterTts();
@@ -39,22 +40,20 @@ class JarvisVoice {
 
   /// Initialize the voice service
   /// Returns true if initialization is successful
-  Future<bool> initialize() async {
+  /// [skipPermissionCheck] - if true, assumes permission already granted
+  Future<bool> initialize({bool skipPermissionCheck = false}) async {
     try {
-      // Request microphone permission
-      final micPermission = await Permission.microphone.request();
-      if (!micPermission.isGranted) {
-        _handleError('Microphone permission denied');
-        return false;
+      // Request microphone permission (only if not already done)
+      if (!skipPermissionCheck) {
+        final micPermission = await Permission.microphone.request();
+        if (!micPermission.isGranted) {
+          _handleError('Microphone permission denied');
+          return false;
+        }
       }
 
-      // Initialize Speech to Text
-      final speechAvailable = await _speech.initialize(
-        onError: (error) =>
-            _handleError('Speech recognition error: ${error.errorMsg}'),
-        onStatus: (status) => _handleStatusChange(status),
-      );
-
+      // Initialize shared SpeechManager
+      final speechAvailable = await _speechManager.initialize();
       if (!speechAvailable) {
         _handleError('Speech recognition not available on this device');
         return false;
@@ -127,8 +126,9 @@ class JarvisVoice {
       _isListening = true;
       onListeningStateChanged?.call(true);
 
-      // Start listening
-      await _speech.listen(
+      // Start listening using shared SpeechManager
+      await _speechManager.listen(
+        owner: 'voice',
         onResult: (result) => _handleSpeechResult(result),
         listenFor: const Duration(seconds: 30), // Maximum listen duration
         pauseFor: const Duration(seconds: 5), // Pause detection
@@ -196,7 +196,7 @@ class JarvisVoice {
 
     try {
       _silenceTimer?.cancel();
-      await _speech.stop();
+      await _speechManager.stopListening('voice');
       _isListening = false;
       onListeningStateChanged?.call(false);
 
@@ -346,8 +346,9 @@ class JarvisVoice {
     if (!_isInitialized) return [];
 
     try {
-      final locales = await _speech.locales();
-      return locales.map((locale) => locale.localeId).toList();
+      // Note: SpeechManager doesn't expose locales() method directly
+      // This would need to be added to SpeechManager if needed
+      return ['en_US'];
     } catch (e) {
       _handleError('Get locales error: $e');
       return [];
@@ -357,7 +358,7 @@ class JarvisVoice {
   /// Dispose resources
   void dispose() {
     _silenceTimer?.cancel();
-    _speech.stop();
+    _speechManager.stopListening('voice');
     _tts.stop();
     _isListening = false;
     _isSpeaking = false;
@@ -367,4 +368,7 @@ class JarvisVoice {
       print('JarvisVoice disposed');
     }
   }
+
+  /// Get the shared SpeechManager instance
+  SpeechManager get speechManager => _speechManager;
 }

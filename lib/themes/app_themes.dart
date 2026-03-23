@@ -8,6 +8,8 @@ enum AppThemeType {
   glassmorphism,
   hal9000,
   terminal,
+  midnightAurora,
+  neonMatrix,
 }
 
 /// Theme configuration with all properties
@@ -276,6 +278,69 @@ class AppThemes {
     backgroundGradient: [Color(0xFF0C0C0C), Color(0xFF0C0C0C)],
   );
 
+  // 7. Midnight Aurora Theme
+  static const midnightAurora = AppThemeConfig(
+    name: 'Midnight Aurora',
+    description: 'Aurora borealis with flowing gradients',
+    icon: Icons.auto_awesome,
+    primaryColor: Color(0xFF00FFA3),
+    accentColor: Color(0xFF8B5CF6),
+    backgroundColor: Color(0xFF0D1117),
+    surfaceColor: Color(0xFF161B22),
+    textColor: Color(0xFFFFFFFF),
+    secondaryTextColor: Color(0xFF8B949E),
+    orbPrimaryColor: Color(0xFF00FFA3),
+    orbSecondaryColor: Color(0xFF8B5CF6),
+    orbGlowColor: Color(0xFF00FFA3),
+    userBubbleColor: Color(0xFF1A3A2A),
+    assistantBubbleColor: Color(0xFF161B22),
+    userTextColor: Color(0xFF00FFA3),
+    assistantTextColor: Color(0xFFE6EDF3),
+    headerColor: Color(0xFF0D1117),
+    headerTextColor: Color(0xFF00FFA3),
+    inputBarColor: Color(0xFF161B22),
+    inputTextColor: Color(0xFFFFFFFF),
+    inputHintColor: Color(0xFF8B949E),
+    useGlowEffects: true,
+    useBlurEffects: true,
+    backgroundGradient: [
+      Color(0xFF0D1117),
+      Color(0xFF0B1A2B),
+      Color(0xFF0D1117),
+    ],
+  );
+
+  // 8. Neon Matrix Theme
+  static const neonMatrix = AppThemeConfig(
+    name: 'Neon Matrix',
+    description: 'Matrix digital rain terminal',
+    icon: Icons.code,
+    primaryColor: Color(0xFF00FF41),
+    accentColor: Color(0xFFFFD700),
+    backgroundColor: Color(0xFF000000),
+    surfaceColor: Color(0xFF0A0A0A),
+    textColor: Color(0xFF00FF41),
+    secondaryTextColor: Color(0xFF00AA2A),
+    orbPrimaryColor: Color(0xFF00FF41),
+    orbSecondaryColor: Color(0xFFFFD700),
+    orbGlowColor: Color(0xFF00FF41),
+    userBubbleColor: Color(0xFF000000),
+    assistantBubbleColor: Color(0xFF000000),
+    userTextColor: Color(0xFF00FF41),
+    assistantTextColor: Color(0xFFFFD700),
+    headerColor: Color(0xFF000000),
+    headerTextColor: Color(0xFF00FF41),
+    inputBarColor: Color(0xFF0A0A0A),
+    inputTextColor: Color(0xFF00FF41),
+    inputHintColor: Color(0xFF006B1D),
+    fontFamily: 'monospace',
+    useGlowEffects: true,
+    useBlurEffects: false,
+    useTypingAnimation: true,
+    borderRadius: 0.0,
+    backgroundGradient: [Color(0xFF000000), Color(0xFF000000)],
+  );
+
   /// Get theme by type
   static AppThemeConfig getTheme(AppThemeType type) {
     switch (type) {
@@ -291,6 +356,10 @@ class AppThemes {
         return hal9000;
       case AppThemeType.terminal:
         return terminal;
+      case AppThemeType.midnightAurora:
+        return midnightAurora;
+      case AppThemeType.neonMatrix:
+        return neonMatrix;
     }
   }
 
